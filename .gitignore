@@ -1,0 +1,29 @@
+# ── Environment files (NEVER push these — contain secrets) ──
+.env
+.env.local
+.env.production
+
+# ── Python ──
+__pycache__/
+*.pyc
+*.pyo
+ml-service/data/movies.csv
+ml-service/data/tmdb_5000_movies.csv
+ml-service/data/tmdb_5000_credits.csv
+# The CSV files are too large for GitHub (100MB limit)
+# Render will download them during build
+
+# ── Node.js ──
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# ── React build output ──
+frontend/dist/
+
+# ── OS files ──
+.DS_Store
+Thumbs.db
+
+# ── VS Code ──
+.vscode/

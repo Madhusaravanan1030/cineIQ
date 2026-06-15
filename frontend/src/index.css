@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+/* ─────────────────────────────────────────────
+   cineIQ Global Styles
+   All colors match your Figma design exactly.
+   We use CSS variables so changing one value
+   updates the entire app.
+───────────────────────────────────────────── */
+:root {
+  --bg-primary:   #0D0D0D;
+  --bg-surface:   #1A1A1A;
+  --bg-input:     #111111;
+  --border:       #2A2A2A;
+  --accent:       #E50914;
+  --accent-hover: #c0000f;
+  --text-primary: #EEEEEE;
+  --text-muted:   #888888;
+  --text-faint:   #555555;
+  --rating:       #EF9F27;
+  --watched:      #1D9E75;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'DM Sans', 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar styling — matches dark theme */
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #444; }
+
+/* Smooth page transitions */
+.page-enter {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.page-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 200ms, transform 200ms;
+}

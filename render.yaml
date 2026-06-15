@@ -1,0 +1,37 @@
+# render.yaml — tells Render how to deploy your services
+# Place this file in your ROOT cineiq/ folder
+
+services:
+  # ── Node.js Backend ──
+  - type: web
+    name: cineiq-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        fromDatabase:
+          name: cineiq-mongodb
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: TMDB_API_KEY
+        sync: false           # you fill this in Render dashboard
+      - key: ML_SERVICE_URL
+        sync: false           # paste Python service URL after deploying it
+
+  # ── Python ML Service ──
+  - type: web
+    name: cineiq-ml
+    runtime: python
+    rootDir: ml-service
+    buildCommand: pip install -r requirements.txt
+    startCommand: bash startup.sh
+    envVars:
+      - key: KAGGLE_USERNAME
+        sync: false           # your Kaggle username
+      - key: KAGGLE_KEY
+        sync: false           # your Kaggle API key
