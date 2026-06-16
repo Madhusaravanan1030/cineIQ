@@ -24,13 +24,7 @@ const app = express();
 // 1. CORS — allows your React app (port 3000) to call
 //    this backend (port 5000). Without this the browser
 //    blocks the request with "CORS policy" error.
-app.use(cors({
-  origin: [
-    "http://localhost:3000",  // React dev server
-    "http://localhost:5173",  // Vite dev server (alternate port)
-  ],
-  credentials: true,          // allow cookies / auth headers
-}));
+app.use(cors());
 
 // 2. JSON parser — converts incoming request body
 //    from raw text into a JavaScript object.
