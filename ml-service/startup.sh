@@ -1,20 +1,18 @@
 #!/bin/bash
 # ─────────────────────────────────────────────
-#  Render startup script for Python ML service
-#
-#  Render runs this script when the service starts.
-#  It downloads the dataset from Kaggle, prepares
-#  it, then starts the FastAPI server.
+#  Render startup script for cineIQ ML service
 # ─────────────────────────────────────────────
 
 echo "Setting up cineIQ ML service..."
+
+# Move into the ml-service directory
+# Render runs this from the repo root, not ml-service/
+cd /opt/render/project/src/ml-service
 
 # Create data directory
 mkdir -p data
 
 # Download TMDB dataset from Kaggle
-# Render needs KAGGLE_USERNAME and KAGGLE_KEY
-# set as environment variables (we add these in Render dashboard)
 echo "Downloading TMDB dataset from Kaggle..."
 kaggle datasets download -d tmdb/tmdb-movie-metadata -p data --unzip
 
@@ -22,6 +20,6 @@ kaggle datasets download -d tmdb/tmdb-movie-metadata -p data --unzip
 echo "Preparing dataset..."
 python prepare_data.py
 
-# Start FastAPI server
-echo "Starting ML service..."
+# Start FastAPI — $PORT is provided by Render automatically
+echo "Starting ML service on port $PORT..."
 uvicorn main:app --host 0.0.0.0 --port $PORT
