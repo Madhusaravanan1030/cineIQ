@@ -24,7 +24,14 @@ const app = express();
 // 1. CORS — allows your React app (port 3000) to call
 //    this backend (port 5000). Without this the browser
 //    blocks the request with "CORS policy" error.
-app.use(cors());
+app.use(cors({
+  origin: [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "https://cine-kly90od9a-madhumitha-saravanan-s-projects.vercel.app"
+  ],
+  credentials: true,
+}));
 
 // 2. JSON parser — converts incoming request body
 //    from raw text into a JavaScript object.
