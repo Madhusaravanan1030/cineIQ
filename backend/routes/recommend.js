@@ -11,44 +11,19 @@ const tmdb = axios.create({
 
 const ML_URL = process.env.ML_SERVICE_URL || "http://localhost:8000";
 
-// ─────────────────────────────────────────────
-//  Enrich one ML result with TMDB poster data.
-//  Strategy:
-//  1. Search TMDB by title
-//  2. Try exact title match
-//  3. If multiple exact matches, prefer the one
-//     whose year matches (avoids Insomnia 1997 vs 2002)
-//  4. Fall back to first result if no exact match
-// ─────────────────────────────────────────────
 const enrichWithTMDB = async (result) => {
   try {
     const response = await tmdb.get("/search/movie", {
       params: { query: result.title, page: 1 },
     });
-
     const results = response.data.results;
     if (!results || results.length === 0) return buildFallback(result);
-
-    // Filter to exact title matches only
-    const exactMatches = results.filter(
+    const exact = results.find(
       (m) => m.title?.toLowerCase() === result.title.toLowerCase()
     );
-
-    let movie;
-    if (exactMatches.length === 1) {
-      // Only one exact match — use it
-      movie = exactMatches[0];
-    } else if (exactMatches.length > 1) {
-      // Multiple exact matches (e.g. Insomnia 1997 + 2002)
-      // Pick the one with highest vote_count — most well known version
-      movie = exactMatches.reduce((best, m) =>
-        (m.vote_count > best.vote_count ? m : best)
-      );
-    } else {
-      // No exact match — use first result
-      movie = results[0];
-    }
-
+    const movie = exact || results.reduce((best, m) =>
+      (m.vote_count > best.vote_count ? m : best)
+    );
     return {
       title:            movie.title,
       match_percent:    result.match_percent,
@@ -80,46 +55,121 @@ const buildFallback = (result) => ({
 });
 
 // ─────────────────────────────────────────────
+//  TMDB fallback — used when:
+//  1. Movie not in ML dataset (post-2016 films)
+//  2. ML similarity scores too low (weak data)
+//  3. ML service is down
+//
+//  Uses TMDB's /movie/:id/similar endpoint which
+//  covers their ENTIRE database of 900,000+ movies
+// ─────────────────────────────────────────────
+const getTMDBRecommendations = async (title, top_n) => {
+  try {
+    // Find movie TMDB ID
+    const searchRes = await tmdb.get("/search/movie", {
+      params: { query: title, page: 1 },
+    });
+    const results = searchRes.data.results;
+    if (!results || results.length === 0) return null;
+
+    // Use most popular match (highest vote_count)
+    const movie = results.reduce((best, m) =>
+      ((m.vote_count || 0) > (best.vote_count || 0) ? m : best)
+    );
+
+    // Try /similar first
+    let movies = [];
+    try {
+      const simRes = await tmdb.get(`/movie/${movie.id}/similar`);
+      movies = simRes.data.results.filter(m => m.poster_path);
+    } catch {}
+
+    // If similar is empty try /recommendations
+    if (movies.length < 3) {
+      try {
+        const recRes = await tmdb.get(`/movie/${movie.id}/recommendations`);
+        movies = recRes.data.results.filter(m => m.poster_path);
+      } catch {}
+    }
+
+    if (movies.length === 0) return null;
+
+    return movies.slice(0, top_n).map((m, i) => ({
+      title:            m.title,
+      match_percent:    Math.max(97 - i * 5, 60),
+      similarity_score: null,
+      source:           "tmdb",
+      tmdb_id:          m.id,
+      poster_path:      `https://image.tmdb.org/t/p/w500${m.poster_path}`,
+      vote_average:     parseFloat(m.vote_average?.toFixed(1)) || 0,
+      year:             m.release_date
+        ? parseInt(m.release_date.split("-")[0])
+        : null,
+      genre_ids:        m.genre_ids || [],
+    }));
+
+  } catch (err) {
+    console.error("TMDB fallback error:", err.message);
+    return null;
+  }
+};
+
+// ─────────────────────────────────────────────
 //  POST /api/recommend
 // ─────────────────────────────────────────────
 router.post("/", async (req, res) => {
   try {
     const { title, top_n = 6 } = req.body;
-
     if (!title) {
       return res.status(400).json({ error: "Movie title is required." });
     }
 
-    // Step 1 — Get ML recommendations
-    let mlResults;
+    // Step 1 — Try Python ML
+    let mlResults = null;
     try {
       const mlResponse = await axios.post(`${ML_URL}/recommend`, {
-        title,
-        top_n,
+        title, top_n,
       }, { timeout: 15000 });
-      mlResults = mlResponse.data.recommendations;
-    } catch (mlErr) {
-      if (mlErr.response?.status === 404) {
-        return res.status(404).json({
-          error: `"${title}" not found in dataset. Try searching for it first.`,
-        });
+
+      // Only trust ML results with decent similarity (> 0.05)
+      // Below this = movie has almost no data in the 2016 dataset
+      const validResults = mlResponse.data.recommendations.filter(
+        r => r.similarity_score > 0.05
+      );
+
+      if (validResults.length >= 3) {
+        mlResults = validResults;
+        console.log(`ML: ${mlResults.length} results for "${title}"`);
+      } else {
+        console.log(`ML weak for "${title}" (best score: ${mlResponse.data.recommendations[0]?.similarity_score}) → TMDB fallback`);
       }
-      return res.status(503).json({
-        error: "Recommendation engine unavailable. Make sure Python ML service is running on port 8000.",
-      });
+    } catch (mlErr) {
+      console.log(`ML unavailable: ${mlErr.message} → TMDB fallback`);
     }
 
-    // Step 2 — Enrich all results with TMDB data in parallel
-    const enriched = await Promise.all(mlResults.map(enrichWithTMDB));
+    // Step 2 — Use ML results or fall back to TMDB
+    let recommendations;
+    if (mlResults && mlResults.length >= 3) {
+      recommendations = await Promise.all(mlResults.map(enrichWithTMDB));
+      recommendations = recommendations.map(r => ({ ...r, source: "ml" }));
+    } else {
+      recommendations = await getTMDBRecommendations(title, top_n);
+      if (!recommendations || recommendations.length === 0) {
+        return res.status(404).json({
+          error: `No recommendations found for "${title}". Try the exact movie title.`,
+        });
+      }
+    }
 
     res.json({
       query:           title,
-      count:           enriched.length,
-      recommendations: enriched,
+      count:           recommendations.length,
+      source:          recommendations[0]?.source || "ml",
+      recommendations,
     });
 
   } catch (err) {
-    console.error("Recommend route error:", err.message);
+    console.error("Recommend error:", err.message);
     res.status(500).json({ error: "Failed to get recommendations." });
   }
 });
