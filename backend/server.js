@@ -24,12 +24,35 @@ const app = express();
 // 1. CORS — allows your React app (port 3000) to call
 //    this backend (port 5000). Without this the browser
 //    blocks the request with "CORS policy" error.
+// Replace your entire cors section in server.js with this:
+
 app.use(cors({
-  origin: [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "https://cine-kly90od9a-madhumitha-saravanan-s-projects.vercel.app"
-  ],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, Postman)
+    if (!origin) return callback(null, true);
+
+    const allowed = [
+      // Local development
+      "http://localhost:3000",
+      "http://localhost:5173",
+      // All Vercel deployments for your project (preview + production)
+      /\.vercel\.app$/,
+      // Your custom domain if you add one later
+    ];
+
+    const isAllowed = allowed.some(pattern =>
+      typeof pattern === "string"
+        ? pattern === origin
+        : pattern.test(origin)
+    );
+
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      console.log("CORS blocked:", origin);
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
   credentials: true,
 }));
 
